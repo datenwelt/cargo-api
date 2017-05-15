@@ -1,0 +1,47 @@
+{
+  "name": "cargo-api",
+  "version": "0.1.0",
+  "description": "Base classes and utilities for API servers with projects by \"datenwelt it service AG\" and friends.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/datenwelt/cargo-api.git"
+  },
+  "author": "Jan Obladen <obladen@datenwelt.net>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/datenwelt/cargo-api/issues"
+  },
+  "homepage": "https://github.com/datenwelt/cargo-api#readme",
+  "dependencies": {
+    "amqplib": "^0.5.1",
+    "bluebird": "^3.5.0",
+    "body-parser": "^1.17.1",
+    "bunyan": "^1.8.10",
+    "change-case": "^3.0.1",
+    "cors": "^2.8.3",
+    "eventemitter2": "^4.1.0",
+    "express": "^4.15.2",
+    "handlebars": "^4.0.8",
+    "jsonwebtoken": "^7.4.0",
+    "mailparser": "^2.0.5",
+    "moment": "^2.18.1",
+    "ms": "^1.0.0",
+    "node-rsa": "^0.4.2",
+    "nodemailer": "^4.0.1",
+    "toml": "^2.3.2",
+    "underscore": "^1.8.3",
+    "verror": "^1.10.0"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "envelope": "^1.0.6",
+    "mocha": "^3.4.1",
+    "sinon": "^2.2.0",
+    "smtp-server": "^3.0.1",
+    "urijs": "^1.18.10"
+  }
+}

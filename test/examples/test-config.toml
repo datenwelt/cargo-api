@@ -1,0 +1,48 @@
+[db.cargo_auth]
+    type = "mysql"
+    database = "cargo_auth"
+    username = "cargo"
+    password = "chieshoaC8Ingoob"
+    port = 13801
+
+    [db.cargo_auth.options]
+        connectTimeout = 1000
+        multipleStatements = true
+
+[server]
+    address = "0.0.0.0"
+    port = "13800"
+    access_log = "/tmp/access.log"
+    error_log = "/tmp/error.log"
+    fail_without_routes = true
+
+[server.routes.0]
+    path = "/auth"
+    module = "src/server/auth.js"
+
+[rsa]
+    privateKey = "test/data/rsa/privkey.encrypted.pem"
+    passphrase = "test123456"
+
+[logs]
+    logfile = "/tmp/app.log"
+    level = "DEBUG"
+
+[mq]
+    uri = "amqp://cargo:cargo@127.0.0.1:13802/cargo_auth"
+    exchange = "cargo"
+
+[smtp]
+    server = "127.0.0.1"
+    port = 13804
+    secure = false
+
+    [smtp.auth]
+        user = "smtpout@dolatel.io"
+        pass = "chieshoaC8Ingoob"
+
+    [smtp.tls]
+        rejectUnauthorized = false
+
+[templates]
+    directory = "test/examples/templates"

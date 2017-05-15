@@ -1,0 +1,7 @@
+version: '3'
+services:
+  cargo-api-rabbitmq:
+    build: ./rabbitmq
+    ports:
+      - "13802:5672"
+      - "13803:15672"
