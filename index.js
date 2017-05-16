@@ -9,7 +9,7 @@ const RSA =		require('./src/rsa');
 const Server =	require('./src/server');
 
 
-module.export = {
+module.exports = {
 	
 	API: API,
 	Check: Check,

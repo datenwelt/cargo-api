@@ -33,9 +33,7 @@ class API extends EventEmitter2 {
 	}
 	
 	// eslint-disable-next-line require-await
-	async
-	
-	close() {
+	async close() {
 		// Interface method
 		this.removeAllListeners();
 	}

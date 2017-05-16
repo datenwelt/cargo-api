@@ -15,12 +15,12 @@ function chain(check, value) {
 function error(...args) {
 	return new VError({
 		name: "CargoCheckError",
-
+		
 	}, ...args);
 }
 
 const Check = {
-
+	
 	not: function () {
 		return _.mapObject(this, function (fn) {
 			// eslint-disable-next-line no-invalid-this
@@ -36,12 +36,12 @@ const Check = {
 			}.bind(this);
 		}, this);
 	},
-
+	
 	isBlank: function (value, msg) {
 		if (value === '' || _.isUndefined(value) || _.isNull(value)) return this;
 		throw error(msg);
 	},
-
+	
 	equals: function (value1, value2, msg) {
 		// eslint-disable-next-line eqeqeq
 		if (value1 == value2) {
@@ -49,37 +49,37 @@ const Check = {
 		}
 		throw error(msg);
 	},
-
+	
 	string: function (value, msg) {
 		if (_.isString(value)) return this;
 		if (_.isUndefined(value) || _.isNull(value)) return chain(Check, "");
 		if (_.isNumber(value) || _.isBoolean(value)) return chain(Check, String(value));
 		throw error(msg);
 	},
-
+	
 	trim: function (value, msg) {
 		value = this.string(msg).val().trim();
 		return chain(Check, value);
 	},
-
+	
 	minLength: function (value, length, msg) {
 		value = this.string(msg).val();
 		if (value.length < length) throw error(msg);
 		return chain(Check, value);
 	},
-
+	
 	maxLength: function (value, length, msg) {
 		value = this.string(msg).val();
 		if (value.length > length) throw error(msg);
 		return chain(Check, value);
 	},
-
+	
 	matches: function (value, regex, msg) {
 		value = this.string(msg).val();
 		if (!value.match(regex)) throw error(msg);
 		return chain(Check, value);
 	},
-
+	
 	transform: function (value, transformer, msg) {
 		try {
 			value = transformer(value);
@@ -88,8 +88,8 @@ const Check = {
 		}
 		return chain(Check, value);
 	}
-
-
+	
+	
 };
 
 module.exports = chain.bind(null, Check);
