@@ -1,6 +1,6 @@
 {
   "name": "@datenwelt/cargo-api",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Base classes and utilities for API servers with projects by \"datenwelt it service AG\" and friends.",
   "main": "index.js",
   "scripts": {
