@@ -1,5 +1,0 @@
-FROM mysql:5.6
-ENV MYSQL_ROOT_PASSWORD=chieshoaC8Ingoob
-ENV MYSQL_DATABASE=cargo_auth
-ENV MYSQL_USER=cargo
-ENV MYSQL_PASSWORD=chieshoaC8Ingoob

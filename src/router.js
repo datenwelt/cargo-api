@@ -5,13 +5,13 @@ const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const VError = require('verror');
 
 class Router {
-
+	
 	init(config, state) {
 		state = state || {};
 		state.routers = state.routers || [];
 		state.routers.push(this);
 	}
-
+	
 	static asyncRouter(router) {
 		return function (req, res, next) {
 			const result = router(req, res, next);
@@ -21,39 +21,49 @@ class Router {
 			return result;
 		};
 	}
-
-	static requiresToken(rsaPublicKey) {
+	
+	static requiresAuthentication() {
+		return function (req, res, next) {
+			if (res.headersSent) return next();
+			if (req.username) return next();
+			if (!res.get('WWW-Authenticate')) res.set('WWW-Authenticate', "* realm='Authorizazion required.'");
+			res.append('X-Cargo-Error', 'ERR_UNAUTHENTICATED_ACCESS');
+			throw new VError(res.get('X-Cargo-Error'));
+		}
+	}
+	
+	static checkSessionToken(rsaPublicKey) {
 		return this.asyncRouter(async function (req, res, next) {
+			if (res.headersSent) return next();
+			if (req.username) return next();
 			const authHeader = req.get('Authorization');
 			if (!authHeader) {
-				res.set('X-Cargo-Error', 'ERR_MISSING_AUTHORIZATION_HEADER')
-					.set('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-				throw new VError('ERR_MISSING_AUTHORIZATION_HEADER');
+				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
+				return next();
 			}
 			let [authType, authToken] = authHeader.split(/\s+/);
 			if (!authType || authType.toLowerCase() !== 'bearer') {
-				res.set('X-Cargo-Error', 'ERR_AUTHORIZATION_TYPE_NOT_SUPPORTED')
-					.set('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-				throw new Error('ERR_AUTHORIZATION_TYPE_NOT_SUPPORTED');
+				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
+				return next();
 			}
 			authToken = (authToken || "").trim();
 			if (!authToken) {
-				res.set('X-Cargo-Error', 'ERR_MISSING_AUTHORIZATION_TOKEN')
-					.set('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-
-				throw new Error('ERR_MISSING_AUTHORIZATION_TOKEN');
+				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
+				return next();
 			}
 			let payload = null;
 			try {
 				payload = await JWT.verifyAsync(authToken, rsaPublicKey);
 			} catch (err) {
 				if (err.name === 'JsonWebTokenError') {
-					res.status(403).set('X-Cargo-Error', 'ERR_INVALID_AUTHORIZATION_TOKEN');
-					throw new Error('ERR_INVALID_AUTHORIZATION_TOKEN');
+					res.status(403).append('X-Cargo-Error', 'ERR_INVALID_AUTHORIZATION_TOKEN');
+					next();
+					return;
 				}
 				if (err.name === 'TokenExpiredError') {
-					res.status(409).set('X-Cargo-Error', 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
-					throw new Error('ERR_EXPIRED_AUTHORIZATION_TOKEN');
+					res.status(410).append('X-Cargo-Error', 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
+					next();
+					return;
 				}
 				throw new VError(err, 'Error validating token');
 			}
@@ -63,11 +73,12 @@ class Router {
 				if (payload.usr.nam) req.username = payload.usr.nam;
 			}
 			req.token = payload;
+			res.append('Vary', 'Authorization')
+			res.status(200);
 			return next();
 		});
 	}
-
-
+	
 }
 
 module.exports = Router;
