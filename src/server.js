@@ -95,8 +95,7 @@ class CargoHttpServer extends Daemon {
 		}
 		
 		this.app.all('*', function (req, res, next) {
-				if (!res.headersSent)
-					res.sendStatus(404);
+				if (!res.headersSent) res.sendStatus(404);
 				next();
 			}
 		);
@@ -113,16 +112,15 @@ class CargoHttpServer extends Daemon {
 		// General error handler.
 		// eslint-disable-next-line handle-callback-err,max-params
 		this.app.use(function (err, req, res, next) {
-			if (res.get(this.errorHeader)) res.cargoError = res.get(this.errorHeader);
 			if (res.statusCode === 200) res.status(500);
 			if (!res.headersSent) res.send();
 			next();
-		}.bind(this));
+		});
 		
 		if (config.server && config.server.access_log) {
 			let logfile = config.server.access_log;
 			try {
-				this.app.use(CargoHttpServer.createAccessLog(logfile));
+				this.app.use(this.createAccessLog(logfile));
 			} catch (err) {
 				throw new VError(err, "Unable to initialize access.log at %s", logfile);
 			}
@@ -239,7 +237,7 @@ class CargoHttpServer extends Daemon {
 		}.bind(this));
 	}
 	
-	static createAccessLog(logfile) {
+	createAccessLog(logfile) {
 		const logger = bunyan.createLogger({
 			name: "access",
 			streams: [{level: 'INFO', path: logfile}]
@@ -253,10 +251,10 @@ class CargoHttpServer extends Daemon {
 			logContent.method = req.method;
 			logContent.url = req.originalUrl;
 			logContent.status = res.statusCode;
-			const cargoError = res.cargoError || "";
+			const cargoError = res.get(this.errorHeader) || "";
 			logger.info(logContent, cargoError);
 			next();
-		};
+		}.bind(this);
 		
 	}
 	
