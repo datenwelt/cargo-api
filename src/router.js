@@ -11,7 +11,9 @@ class Router {
 		state.routers = state.routers || [];
 		state.routers.push(this);
 	}
-	
+
+	shutdown() {}
+
 	static asyncRouter(router) {
 		return function (req, res, next) {
 			const result = router(req, res, next);

@@ -17,7 +17,7 @@ const Daemon = require('./daemon');
 const MQ = require('./mq');
 
 class CargoHttpServer extends Daemon {
-
+	
 	constructor(name, configFile, options) {
 		super(name, options);
 		if (!configFile) {
@@ -27,36 +27,39 @@ class CargoHttpServer extends Daemon {
 		this.routers = [];
 		this.mq = null;
 		this.appLogger = null;
+		this.errorHeader = 'X-Cargo-Error';
 	}
-
+	
 	clone() {
 		return new CargoHttpServer(this.name, this.configFile, this.options);
 	}
-
+	
 	async init() {
 		const config = await Config.load(this.configFile);
 		const state = {};
-
+		
+		if (config.server && config.server.errorHeader) this.errorHeader = config.server.errorHeader;
+		
 		let port = Number.parseInt(config.server.port || 80, 10);
 		if (Number.isNaN(port) || port <= 0) {
 			throw new VError('Invalid value for "server.port": %s', config.server.port);
 		}
 		this.listen = {port: port, address: config.server.address || "127.0.0.1"};
-
+		
 		this.app = express();
-
+		
 		this.app.use(function (req, res, next) {
 			const md5 = crypto.createHash('MD5');
 			md5.update(Math.random().toString(10));
 			req.id = md5.digest('hex').substr(0, 8).toUpperCase();
 			next();
 		});
-
-
+		
+		
 		this.app.use(bodyParser.json());
 		this.app.use(cors());
 		this.app.options('*', cors());
-
+		
 		if (config.server.routes) {
 			for (let routeIndex of Object.keys(config.server.routes).sort()) {
 				let routeConfig = config.server.routes[routeIndex];
@@ -90,14 +93,14 @@ class CargoHttpServer extends Daemon {
 				throw new VError('Server has no routes. Use config setting "server.fail_without_routes=false" to start anyways.');
 			}
 		}
-
+		
 		this.app.all('*', function (req, res, next) {
 				if (!res.headersSent)
 					res.sendStatus(404);
 				next();
 			}
 		);
-
+		
 		if (config.server && config.server.error_log) {
 			let logfile = config.server.error_log;
 			try {
@@ -106,15 +109,16 @@ class CargoHttpServer extends Daemon {
 				throw new VError(err, "Unable to initialize error.log at %s", logfile);
 			}
 		}
-
+		
 		// General error handler.
 		// eslint-disable-next-line handle-callback-err,max-params
 		this.app.use(function (err, req, res, next) {
+			if (res.get(this.errorHeader)) res.cargoError = res.get(this.errorHeader);
 			if (res.statusCode === 200) res.status(500);
 			if (!res.headersSent) res.send();
 			next();
-		});
-
+		}.bind(this));
+		
 		if (config.server && config.server.access_log) {
 			let logfile = config.server.access_log;
 			try {
@@ -123,7 +127,7 @@ class CargoHttpServer extends Daemon {
 				throw new VError(err, "Unable to initialize access.log at %s", logfile);
 			}
 		}
-
+		
 		// Application log
 		if (config.logs && config.logs.logfile) {
 			const logfile = config.logs.logfile;
@@ -153,7 +157,7 @@ class CargoHttpServer extends Daemon {
 				throw new VError(err, "Unable to initialize application log at %s", logfile);
 			}
 		}
-
+		
 		// Message Queue for API events.
 		if (config.mq && state.apis && _.keys(state.apis).length) {
 			try {
@@ -194,7 +198,7 @@ class CargoHttpServer extends Daemon {
 		}
 		return config;
 	}
-
+	
 	startup() {
 		return new Promise(function (resolve, reject) {
 			const app = this.app;
@@ -204,8 +208,6 @@ class CargoHttpServer extends Daemon {
 				app.removeListener('error', errorListener);
 				reject(new VError(err, "Error listening on %s:%s", addr, port));
 			});
-			// eslint-disable-next-line consistent-this
-			const self = this;
 			let listenReady = function (server) {
 				app.server = server;
 				this.log_info('Server listening on %s:%d', addr, port);
@@ -216,10 +218,10 @@ class CargoHttpServer extends Daemon {
 				listenReady(this);
 				resolve();
 			});
-
+			
 		}.bind(this));
 	}
-
+	
 	shutdown() {
 		return new Promise(function (resolve) {
 			if (this.app && this.app.server) {
@@ -236,7 +238,7 @@ class CargoHttpServer extends Daemon {
 			resolve();
 		}.bind(this));
 	}
-
+	
 	static createAccessLog(logfile) {
 		const logger = bunyan.createLogger({
 			name: "access",
@@ -251,13 +253,13 @@ class CargoHttpServer extends Daemon {
 			logContent.method = req.method;
 			logContent.url = req.originalUrl;
 			logContent.status = res.statusCode;
-			const cargoError = res.get('X-Cargo-Error') || "";
+			const cargoError = res.cargoError || "";
 			logger.info(logContent, cargoError);
 			next();
 		};
-
+		
 	}
-
+	
 	static createErrorLog(logfile) {
 		const logger = bunyan.createLogger({
 			name: "error",
@@ -269,7 +271,7 @@ class CargoHttpServer extends Daemon {
 			next(err);
 		};
 	}
-
+	
 }
 
 module.exports = CargoHttpServer;
