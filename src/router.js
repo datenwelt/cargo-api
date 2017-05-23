@@ -29,18 +29,18 @@ class Router {
 		};
 	}
 	
-	static requiresAuthentication() {
+	requiresAuthentication() {
 		return function (req, res, next) {
 			if (res.headersSent) return next();
 			if (req.username) return next();
 			if (!res.get('WWW-Authenticate')) res.set('WWW-Authenticate', "* realm='Authorizazion required.'");
-			res.append('X-Cargo-Error', 'ERR_UNAUTHENTICATED_ACCESS');
+			res.append(this.errorHeader, 'ERR_UNAUTHENTICATED_ACCESS');
 			throw new VError(res.get('X-Cargo-Error'));
-		}
+		}.bind(this);
 	}
 	
-	static checkSessionToken(rsaPublicKey) {
-		return this.asyncRouter(async function (req, res, next) {
+	checkSessionToken(rsaPublicKey) {
+		return Router.asyncRouter(async function (req, res, next) {
 			if (res.headersSent) return next();
 			if (req.username) return next();
 			const authHeader = req.get('Authorization');
@@ -63,14 +63,12 @@ class Router {
 				payload = await JWT.verifyAsync(authToken, rsaPublicKey);
 			} catch (err) {
 				if (err.name === 'JsonWebTokenError') {
-					res.status(403).append('X-Cargo-Error', 'ERR_INVALID_AUTHORIZATION_TOKEN');
-					next();
-					return;
+					res.status(403).append(this.errorHeader, 'ERR_INVALID_AUTHORIZATION_TOKEN');
+					return next();
 				}
 				if (err.name === 'TokenExpiredError') {
-					res.status(410).append('X-Cargo-Error', 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
-					next();
-					return;
+					res.status(410).append(this.errorHeader, 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
+					return next();
 				}
 				throw new VError(err, 'Error validating token');
 			}
@@ -80,10 +78,10 @@ class Router {
 				if (payload.usr.nam) req.username = payload.usr.nam;
 			}
 			req.token = payload;
-			res.append('Vary', 'Authorization')
+			res.append('Vary', 'Authorization');
 			res.status(200);
 			return next();
-		});
+		}.bind(this));
 	}
 	
 }
