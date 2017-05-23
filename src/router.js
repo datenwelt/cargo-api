@@ -6,10 +6,15 @@ const VError = require('verror');
 
 class Router {
 	
+	constructor() {
+		this.errorHeader = 'X-Cargo-Error';
+	}
+	
 	init(config, state) {
 		state = state || {};
 		state.routers = state.routers || [];
 		state.routers.push(this);
+		if (config.server && config.server.errorHeader) this.errorHeader = config.server.errorHeader;
 	}
 
 	shutdown() {}
