@@ -5,7 +5,7 @@ const sinon = require('sinon');
 
 const check = require('../../src/check');
 
-describe("utils/check.js", function() {
+describe("check.js", function() {
 
 	describe("not()", function() {
 

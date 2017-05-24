@@ -9,7 +9,7 @@ const TestConfig = require('../test-utils/test-config');
 const TestSmtp = require('../test-utils/test-smtpout');
 
 
-describe('utils/mailer.js', function() {
+describe('mailer.js', function() {
 
 	let smtp = null;
 	let config = null;

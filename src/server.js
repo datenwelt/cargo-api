@@ -1,4 +1,4 @@
-/* eslint-disable id-length */
+/* eslint-disable id-length,class-methods-use-this */
 const _ = require('underscore');
 const bunyan = require('bunyan');
 const crypto = require('crypto');
@@ -27,7 +27,6 @@ class CargoHttpServer extends Daemon {
 		this.routers = [];
 		this.mq = null;
 		this.appLogger = null;
-		this.errorHeader = 'X-Cargo-Error';
 	}
 	
 	clone() {
@@ -37,8 +36,6 @@ class CargoHttpServer extends Daemon {
 	async init() {
 		const config = await Config.load(this.configFile);
 		const state = {};
-		
-		if (config.server && config.server.errorHeader) this.errorHeader = config.server.errorHeader;
 		
 		let port = Number.parseInt(config.server.port || 80, 10);
 		if (Number.isNaN(port) || port <= 0) {
@@ -120,7 +117,7 @@ class CargoHttpServer extends Daemon {
 		if (config.server && config.server.access_log) {
 			let logfile = config.server.access_log;
 			try {
-				this.app.use(this.createAccessLog(logfile));
+				this.app.use(CargoHttpServer.createAccessLog(logfile));
 			} catch (err) {
 				throw new VError(err, "Unable to initialize access.log at %s", logfile);
 			}
@@ -237,7 +234,7 @@ class CargoHttpServer extends Daemon {
 		}.bind(this));
 	}
 	
-	createAccessLog(logfile) {
+	static createAccessLog(logfile) {
 		const logger = bunyan.createLogger({
 			name: "access",
 			streams: [{level: 'INFO', path: logfile}]
@@ -251,10 +248,10 @@ class CargoHttpServer extends Daemon {
 			logContent.method = req.method;
 			logContent.url = req.originalUrl;
 			logContent.status = res.statusCode;
-			const cargoError = res.get(this.errorHeader) || "";
+			const cargoError = res.get('X-Error') || "";
 			logger.info(logContent, cargoError);
 			next();
-		}.bind(this);
+		};
 		
 	}
 	

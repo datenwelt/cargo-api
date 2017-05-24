@@ -11,7 +11,7 @@ const it = require("mocha").it;
 const describe = require("mocha").describe;
 const expect = chai.expect;
 
-describe("utils/rsa.js", function () {
+describe("rsa.js", function () {
 
 	const unencryptedPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA0ukwklDp1CUNOhZCraBZ8vT8EKVvXFNbJtkrX+tBF2zFckw8
@@ -41,7 +41,7 @@ tq0LbuT1N38IOpBDtqfMHlHHk9SRK/Mx0b6a0uATSb+1TYIZdgF3wdKmm9h4dVdy
 Z2n/LW9xVrQQiP+xiEWTlzgPiQXt/uynBCwPTWYino5Rsu3He5P0
 -----END RSA PRIVATE KEY-----`;
 
-	describe("RSA.evpBytesToKey()", function () {
+	describe("static evpBytesToKey()", function () {
 
 		it("generates the expected key and IV for AES-128-CBC", function () {
 			const salt = "13F689619F77E4E55F68556C1A9FEEF8";
@@ -100,7 +100,7 @@ Z2n/LW9xVrQQiP+xiEWTlzgPiQXt/uynBCwPTWYino5Rsu3He5P0
 
 	});
 
-	describe("RSA.readPrivateKey()", function () {
+	describe("static readPrivateKey()", function () {
 
 		it("reads an unencrypted private key", async function () {
 			const data = await fs.readFileAsync('test/data/rsa/privkey.pem');
