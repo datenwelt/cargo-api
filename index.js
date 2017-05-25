@@ -1,5 +1,6 @@
 const API =		require('./src/api');
 const Check =	require('./src/check');
+const Checks =	require('./src/checks');
 const Config =	require('./src/config');
 const Daemon =	require('./src/daemon');
 const Mailer =	require('./src/mailer');
@@ -13,6 +14,7 @@ module.exports = {
 	
 	API: API,
 	Check: Check,
+	Checks: Checks,
 	Config: Config,
 	Daemon: Daemon,
 	Mailer: Mailer,
