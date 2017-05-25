@@ -115,7 +115,7 @@ class Router {
 				} catch (err) {
 					if (err instanceof VError && err.name === 'CargoCheckError')
 						res.set('X-Error', errorPrefix + err.message).sendStatus(400);
-					else throw new VError(err, 'Error in request body check');
+					else throw new VError(err, 'Internal error in request body check');
 				}
 			}
 			next();

@@ -127,11 +127,11 @@ class Checks {
 		else throw new VError({name: errorName}, 'INVALID');
 	}
 	
-	static check(value, predicate) {
+	static check(predicate, value) {
 		return predicate(value);
 	}
 	
-	static transform(value, transformer) {
+	static transform(transformer, value) {
 		return transformer(value);
 	}
 	
