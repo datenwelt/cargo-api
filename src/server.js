@@ -37,6 +37,31 @@ class CargoHttpServer extends Daemon {
 		const config = await Config.load(this.configFile);
 		const state = {};
 		
+		// Application logger
+		if (config.logs && config.logs.logfile) {
+			const logfile = config.logs.logfile;
+			const level = config.logs.level || 'INFO';
+			try {
+				this.appLogger = bunyan.createLogger({
+					name: this.name,
+					streams: [{path: logfile, type: 'file'}],
+					level: level
+				});
+			} catch (err) {
+				throw new VError(err, "Unable to initialize application log at %s", logfile);
+			}
+		}
+		
+		// MQ connection
+		if (config.mq) {
+			try {
+				this.mq = await new MQ().init(config.mq);
+			} catch (err) {
+				throw new VError(err, "Unable to connect to message queue at %s", config.uri);
+			}
+		}
+		
+		
 		let port = Number.parseInt(config.server.port || 80, 10);
 		if (Number.isNaN(port) || port <= 0) {
 			throw new VError('Invalid value for "server.port": %s', config.server.port);
@@ -62,6 +87,8 @@ class CargoHttpServer extends Daemon {
 				let routeConfig = config.server.routes[routeIndex];
 				let route = routeConfig.path;
 				let moduleSrc = routeConfig.module;
+				let routerName = this.name + ".";
+				routerName += routeConfig.name || "router" + routeIndex;
 				try {
 					if (!route) {
 						throw new VError('Missing "path" in configuration for route #%s', routeIndex);
@@ -80,6 +107,8 @@ class CargoHttpServer extends Daemon {
 					// eslint-disable-next-line no-await-in-loop
 					this.app.use(route, await router.init(config, state));
 					this.routers.push(router);
+					if (this.mq) router.onAny(this.createMqDispatcher(routerName));
+					if (this.appLogger) router.onAny(this.createApplogDispatcher());
 				} catch (err) {
 					this.log_error(err, 'Unable to initialize router for route "%s" from module "%s". Skipping this route.', route, moduleSrc);
 				}
@@ -97,6 +126,7 @@ class CargoHttpServer extends Daemon {
 			}
 		);
 		
+		// Error log
 		if (config.server && config.server.error_log) {
 			let logfile = config.server.error_log;
 			try {
@@ -114,6 +144,7 @@ class CargoHttpServer extends Daemon {
 			next();
 		});
 		
+		// Access Log
 		if (config.server && config.server.access_log) {
 			let logfile = config.server.access_log;
 			try {
@@ -123,74 +154,6 @@ class CargoHttpServer extends Daemon {
 			}
 		}
 		
-		// Application log
-		if (config.logs && config.logs.logfile) {
-			const logfile = config.logs.logfile;
-			const level = config.logs.level || 'INFO';
-			try {
-				this.appLogger = bunyan.createLogger({
-					name: this.name,
-					streams: [{path: logfile, type: 'file'}],
-					level: level
-				});
-				for (let api of _.values(state.apis)) {
-					api.logger = this.appLogger;
-					api.onAny(function (event, ...args) {
-						if (event === 'error') {
-							if (args[0] && args[0] instanceof Error) {
-								this.appLogger.error(args[0].message);
-								this.appLogger.debug(...args);
-							} else {
-								this.appLogger.error(...args);
-							}
-						} else {
-							this.appLogger.info(...args);
-						}
-					}.bind(this));
-				}
-			} catch (err) {
-				throw new VError(err, "Unable to initialize application log at %s", logfile);
-			}
-		}
-		
-		// Message Queue for API events.
-		if (config.mq && state.apis && _.keys(state.apis).length) {
-			try {
-				this.mq = await new MQ().init(config.mq);
-			} catch (err) {
-				throw new VError(err, "Unable to connect to message queue at %s", config.uri);
-			}
-			for (let api of _.values(state.apis)) {
-				api.onAny(async function (event, data) {
-					if (event !== 'error') {
-						let channel = null;
-						try {
-							channel = await this.mq.connectChannel();
-						} catch (err) {
-							this.log_error(err, 'Unable to connect to message queue at %s', this.mq.uri);
-							this.log_info('Shutting down after fatal error.');
-							await this.shutdown();
-							// eslint-disable-next-line no-process-exit
-							process.exit(1);
-							return;
-						}
-						try {
-							// eslint-disable-next-line no-undefined
-							const json = JSON.stringify(data || {}, undefined, ' ');
-							const content = Buffer.from(json, 'utf8');
-							channel.publish(this.mq.exchange, event, content, {
-								persistent: true,
-								contentType: 'application/json',
-								timestamp: moment().unix(),
-								appId: this.name + '@' + os.hostname()
-							});
-						} catch (err) {
-							this.log_error(err, "Unable publish API event '%s' to message qeue: %s", event, err.message);
-						}
-					}
-				}.bind(this));
-			}
-		}
 		return config;
 	}
 	
@@ -262,9 +225,57 @@ class CargoHttpServer extends Daemon {
 		});
 		// eslint-disable-next-line max-params
 		return function (err, req, res, next) {
-			logger.error({requestId: req.id, err: err});
+			if (req.statusCode === 500)
+				logger.error({requestId: req.id, err: err});
 			next(err);
 		};
+	}
+	
+	createMqDispatcher(name) {
+		return async function (event, data) {
+			if (event !== 'error') {
+				let channel = null;
+				try {
+					channel = await this.mq.connectChannel();
+				} catch (err) {
+					this.log_error(err, 'Unable to connect to message queue at %s', this.mq.uri);
+					this.log_info('Shutting down after fatal error.');
+					await this.shutdown();
+					// eslint-disable-next-line no-process-exit
+					process.exit(1);
+					return;
+				}
+				try {
+					// eslint-disable-next-line no-undefined
+					const json = JSON.stringify(data || {}, undefined, ' ');
+					const content = Buffer.from(json, 'utf8');
+					const routingKey = name + "." + event;
+					channel.publish(this.mq.exchange, routingKey, content, {
+						persistent: true,
+						contentType: 'application/json',
+						timestamp: moment().unix(),
+						appId: this.name + '@' + os.hostname()
+					});
+				} catch (err) {
+					this.log_error(err, "Unable publish API event '%s' to message qeue: %s", event, err.message);
+				}
+			}
+		}.bind(this);
+	}
+	
+	createApplogDispatcher() {
+		return function (event, ...args) {
+			if (event === 'error') {
+				if (args[0] && args[0] instanceof Error) {
+					this.appLogger.error(args[0].message);
+					this.appLogger.debug(...args);
+				} else {
+					this.appLogger.error(...args);
+				}
+			} else {
+				this.appLogger.info(...args);
+			}
+		}.bind(this);
 	}
 	
 }

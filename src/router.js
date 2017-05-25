@@ -2,12 +2,19 @@
 
 const bluebird = require('bluebird');
 const changecase = require('change-case');
+const EventEmitter = require('eventemitter2').EventEmitter2;
 const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
+const moment = require('moment');
 const VError = require('verror');
 
 const Checks = require('./checks');
 
-class Router {
+class Router extends EventEmitter {
+	
+	constructor(name) {
+		super();
+		this.name = name;
+	}
 	
 	init(config, state) {
 		state = state || {};
@@ -16,6 +23,7 @@ class Router {
 	}
 	
 	shutdown() {
+		this.removeAllListeners();
 	}
 	
 	static asyncRouter(router) {
@@ -102,24 +110,64 @@ class Router {
 			else {
 				try {
 					let value = req.body[fieldName];
-					value = Checks.optional(options.optional, value);
-					if (options.cast) value = Checks.cast(options.cast, value);
-					if (options.transform) value = Checks.transform(options.transform, value);
-					if (options.check) value = Checks.check(options.check, value);
-					if (options.type) value = Checks.type(options.type, value);
-					if (options.minLength) value = Checks.minLength(options.minLength, value);
-					if (options.maxLength) value = Checks.maxLength(options.maxLength, value);
-					if (options.match) value = Checks.match(options.match, value);
-					if (options.notBlank) value = Checks.notBlank(value);
-					req.body[fieldName] = value;
+					let isPresent = Checks.optional(options.optional, value);
+					if (isPresent) {
+						if (options.cast) value = Checks.cast(options.cast, value);
+						if (options.type) value = Checks.type(options.type, value);
+						if (options.transform) value = Checks.transform(options.transform, value);
+						if (options.check) value = Checks.check(options.check, value);
+						if (options.notBlank) value = Checks.notBlank(value);
+						if (options.minLength) value = Checks.minLength(options.minLength, value);
+						if (options.maxLength) value = Checks.maxLength(options.maxLength, value);
+						if (options.match) value = Checks.match(options.match, value);
+						req.body[fieldName] = value;
+					}
 				} catch (err) {
-					if (err instanceof VError && err.name === 'CargoCheckError')
-						res.set('X-Error', errorPrefix + err.message).sendStatus(400);
-					else throw new VError(err, 'Internal error in request body check');
+					if (err instanceof VError && err.name === 'CargoCheckError') {
+						res.set('X-Error', errorPrefix + err.message).status(400);
+						return next(err);
+					}
+					throw new VError(err, 'Internal error in request body check');
 				}
 			}
-			next();
+			return next();
 		};
+	}
+	
+	static serialize(data) {
+		if (data instanceof Date) {
+			return moment(data).toISOString();
+		}
+		if (data && data.toISOString) {
+			return data.toISOString();
+		}
+		if (typeof data === 'function') {
+			// eslint-disable-next-line no-undefined
+			return undefined;
+		}
+		// eslint-disable-next-line no-undefined
+		if (data === undefined || data === null || typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+			return data;
+		}
+		if (Array.isArray(data)) {
+			let result = [];
+			for (let idx = 0; idx < data.length; idx++) {
+				let value = data[idx];
+				result[idx] = Router.serialize(value);
+			}
+			return result;
+		}
+		let keys = Object.keys(data);
+		let result = {};
+		for (let key of keys) {
+			let value = data[key];
+			// eslint-disable-next-line no-undefined
+			if (value !== undefined) {
+				key = changecase.camel(key);
+				result[key] = Router.serialize(value);
+			}
+		}
+		return result;
 	}
 	
 }

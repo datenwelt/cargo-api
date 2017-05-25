@@ -1,4 +1,4 @@
-/* eslint-disable id-length,no-undefined,complexity */
+/* eslint-disable id-length,no-undefined,complexity,no-extra-parens */
 const _ = require('underscore');
 const moment = require('moment');
 const VError = require('verror');
@@ -8,10 +8,9 @@ const errorName = 'CargoCheckError';
 class Checks {
 	
 	static optional(isOptional, value) {
-		if (isOptional) return Checks;
+		if (isOptional) return (value !== null && value !== undefined);
 		if (value === null || value === undefined) throw new VError({name: errorName}, 'MISSING');
-		if (_.isString(value) && value === '') throw new VError({name: errorName}, 'MISSING');
-		return value;
+		return true;
 	}
 	
 	static cast(targetType, value) {
