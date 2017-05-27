@@ -56,8 +56,30 @@ class HttpServer extends Daemon {
 		if (config.mq) {
 			try {
 				this.mq = await new MQ().init(config.mq);
+				state.mq = this.mq;
 			} catch (err) {
 				throw new VError(err, "Unable to connect to message queue at %s", config.uri);
+			}
+		}
+		
+		let errorLog = null;
+		if (config.server && config.server.error_log) {
+			let logfile = config.server.error_log;
+			try {
+				errorLog = HttpServer.createErrorLog(logfile);
+			} catch (err) {
+				throw new VError(err, "Unable to initialize error.log at %s", logfile);
+			}
+		}
+		
+		// Access Log
+		let accessLog = null;
+		if (config.server && config.server.access_log) {
+			let logfile = config.server.access_log;
+			try {
+				accessLog = HttpServer.createAccessLog(logfile);
+			} catch (err) {
+				throw new VError(err, "Unable to initialize access.log at %s", logfile);
 			}
 		}
 		
@@ -127,30 +149,24 @@ class HttpServer extends Daemon {
 			}
 		);
 		
-		// Error log
-		if (config.server && config.server.error_log) {
-			let logfile = config.server.error_log;
-			try {
-				this.app.use(HttpServer.createErrorLog(logfile));
-			} catch (err) {
-				throw new VError(err, "Unable to initialize error.log at %s", logfile);
-			}
-		}
-		
 		// General error handler.
 		// eslint-disable-next-line handle-callback-err,max-params
-		this.app.use(HttpServer.createStandardErrorHandler());
+		this.app.use(HttpServer.createHttpErrorHandler());
 		
-		// Access Log
-		if (config.server && config.server.access_log) {
-			let logfile = config.server.access_log;
-			try {
-				this.app.use(HttpServer.createAccessLog(logfile));
-			} catch (err) {
-				throw new VError(err, "Unable to initialize access.log at %s", logfile);
-			}
-		}
-		
+		// Logging
+		if (errorLog) this.app.use(errorLog);
+		if (accessLog) this.app.use(accessLog);
+		// eslint-disable-next-line max-params
+		if (accessLog) this.app.use(function (err, req, res, next) {
+			accessLog(req, res, function () {
+				next(err);
+			});
+		});
+
+		// eslint-disable-next-line no-unused-vars,max-params,handle-callback-err
+		this.app.use(function (err, req, res, next) {
+			if (!res.headersSent) res.end();
+		});
 		return config;
 	}
 	
@@ -194,12 +210,11 @@ class HttpServer extends Daemon {
 		}.bind(this));
 	}
 	
-	static createStandardErrorHandler(headerName) {
+	static createHttpErrorHandler(headerName) {
 		headerName = headerName || 'X-Error';
 		// eslint-disable-next-line max-params
 		return function (err, req, res, next) {
-			if (err.name === 'HttpError') res.set(headerName, err.message).sendStatus(err.code);
-			else res.sendStatus(500);
+			if (err.name === 'HttpError') res.set(headerName, err.message).status(err.code);
 			next(err);
 		};
 	}
@@ -232,8 +247,7 @@ class HttpServer extends Daemon {
 		});
 		// eslint-disable-next-line max-params
 		return function (err, req, res, next) {
-			if (res.statusCode === 500)
-				logger.error({requestId: req.id, err: err});
+			if (res.statusCode === 500) logger.error({requestId: req.id, err: err});
 			next(err);
 		};
 	}

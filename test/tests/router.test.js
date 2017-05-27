@@ -107,7 +107,7 @@ describe('router.js', function () {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', Server.createHttpErrorHandler());
 			app.use('/', suppressErrorLog);
 			try {
 				let resp = await superagent.get(app.uri.toString()).set('Authorization', 'Bearer ' + sessionToken);
@@ -127,7 +127,7 @@ describe('router.js', function () {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', Server.createHttpErrorHandler());
 			app.use('/', suppressErrorLog);
 			try {
 				await superagent.get(app.uri.toString());
@@ -148,7 +148,7 @@ describe('router.js', function () {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', Server.createHttpErrorHandler());
 			app.use('/', suppressErrorLog);
 			try {
 				let resp = await superagent.get(app.uri.toString()).set('Authorization', 'Bearer ' + sessionToken);
