@@ -1,4 +1,3 @@
-const Check =	require('./src/check');
 const Checks =	require('./src/checks');
 const Config =	require('./src/config');
 const Daemon =	require('./src/daemon');
@@ -11,7 +10,6 @@ const Server =	require('./src/server');
 
 module.exports = {
 	
-	Check: Check,
 	Checks: Checks,
 	Config: Config,
 	Daemon: Daemon,
