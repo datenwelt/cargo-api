@@ -123,7 +123,7 @@ class Router extends EventEmitter {
 						req.body[fieldName] = value;
 					}
 				} catch (err) {
-					if (err instanceof VError && err.name === 'CargoCheckError') {
+					if (err.name === 'CargoCheckError') {
 						res.set('X-Error', errorPrefix + err.message).status(400);
 						return next(err);
 					}

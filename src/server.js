@@ -225,7 +225,7 @@ class CargoHttpServer extends Daemon {
 		});
 		// eslint-disable-next-line max-params
 		return function (err, req, res, next) {
-			if (req.statusCode === 500)
+			if (res.statusCode === 500)
 				logger.error({requestId: req.id, err: err});
 			next(err);
 		};
