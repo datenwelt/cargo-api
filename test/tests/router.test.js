@@ -20,10 +20,15 @@ const superagent = require('superagent');
 
 const Checks = require('../../src/checks');
 const Router = require('../../src/router');
+const Server = require('../../src/server');
 
 let config = null;
 let app = null;
 let rsa = null;
+
+function suppressErrorLog(err, req, res, next) {
+	if (!res.headersSent) res.end();
+}
 
 async function createValidSession(username, rsaPrivateKey) {
 	// Create a session id.
@@ -33,7 +38,8 @@ async function createValidSession(username, rsaPrivateKey) {
 	const sessionId = hash.digest('hex');
 	const iat = moment();
 	const exp = iat.add(48, 'h');
-	const token = await JWT.signAsync({
+	const token = await
+	JWT.signAsync({
 		sess: sessionId,
 		iat: iat.unix(),
 		exp: exp.unix(),
@@ -77,14 +83,13 @@ describe('router.js', function () {
 		app = null;
 	});
 	
-	describe('static checkSessionToken()', function () {
+	describe('static requireSessionToken()', function () {
 		
 		it('responds with 200 if session token is valid', async function () {
 			let sessionToken = await createValidSession('testman', rsa.rsaPrivateKey);
-			let checkSessionToken = Router.checkSessionToken(rsa.rsaPublicKey);
-			let spy = sinon.spy(checkSessionToken);
+			let requireSessionToken = Router.requireSessionToken(rsa.rsaPublicKey);
+			let spy = sinon.spy(requireSessionToken);
 			app.use('/', spy);
-			app.use('/', Router.requiresAuthentication());
 			app.get('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
@@ -95,44 +100,35 @@ describe('router.js', function () {
 		
 		it('responds with 410 if session token is expired', async function () {
 			let sessionToken = await createExpiredSession('testman', rsa.rsaPrivateKey);
-			let checkSessionToken = Router.checkSessionToken(rsa.rsaPublicKey);
-			let spy1 = sinon.spy(checkSessionToken);
-			let requiresAuthentication = Router.requiresAuthentication();
-			let spy2 = sinon.spy(requiresAuthentication);
+			let requireSessionToken = Router.requireSessionToken(rsa.rsaPublicKey);
+			let spy1 = sinon.spy(requireSessionToken);
 			app.use('/', spy1);
-			app.use('/', spy2);
 			app.get('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', function (err, req, res, next) {
-				res.end();
-			});
+			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', suppressErrorLog);
 			try {
 				let resp = await superagent.get(app.uri.toString()).set('Authorization', 'Bearer ' + sessionToken);
 				this.fail('Request succeeded unexpectedly');
 			} catch (err) {
 				assert.isDefined(err.response);
 				assert.equal(err.response.status, 410);
-				assert.isTrue(spy1.called, "Router.checkSessionToken() has been called");
-				assert.isTrue(spy2.called, "Router.requiresAuthentication() has been called");
+				assert.isTrue(spy1.called, "Router.requireSessionToken() has been called");
 			}
 		});
 		
 		it('responds with 401 if session token is missing', async function () {
-			let checkSessionToken = Router.checkSessionToken(rsa.rsaPublicKey);
-			let spy1 = sinon.spy(checkSessionToken);
-			let requiresAuthentication = Router.requiresAuthentication();
-			let spy2 = sinon.spy(requiresAuthentication);
+			let requireSessionToken = Router.requireSessionToken(rsa.rsaPublicKey);
+			let spy1 = sinon.spy(requireSessionToken);
 			app.use('/', spy1);
-			app.use('/', spy2);
 			app.get('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', function (err, req, res, next) {
-				res.end();
-			});
+			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', suppressErrorLog);
 			try {
 				await superagent.get(app.uri.toString());
 				this.fail('Request succeeded unexpectedly');
@@ -140,25 +136,20 @@ describe('router.js', function () {
 				assert.isDefined(err.response);
 				assert.equal(err.response.status, 401);
 				assert.isTrue(spy1.called, "Router.checkSessionToken() has been called");
-				assert.isTrue(spy2.called, "Router.requiresAuthentication() has been called");
 			}
 		});
 		
 		it('responds with 403 if session token is invalid', async function () {
 			let sessionToken = "YXXXXXXZ";
-			let checkSessionToken = Router.checkSessionToken(rsa.rsaPublicKey);
-			let spy1 = sinon.spy(checkSessionToken);
-			let requiresAuthentication = Router.requiresAuthentication();
-			let spy2 = sinon.spy(requiresAuthentication);
+			let requiresSessionToken = Router.requireSessionToken(rsa.rsaPublicKey);
+			let spy1 = sinon.spy(requiresSessionToken);
 			app.use('/', spy1);
-			app.use('/', spy2);
 			app.get('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
 			});
-			app.use('/', function (err, req, res, next) {
-				res.end();
-			});
+			app.use('/', Server.createStandardErrorHandler());
+			app.use('/', suppressErrorLog);
 			try {
 				let resp = await superagent.get(app.uri.toString()).set('Authorization', 'Bearer ' + sessionToken);
 				this.fail('Request succeeded unexpectedly');
@@ -166,7 +157,6 @@ describe('router.js', function () {
 				assert.isDefined(err.response);
 				assert.equal(err.response.status, 403);
 				assert.isTrue(spy1.called, "Router.checkSessionToken() has been called");
-				assert.isTrue(spy2.called, "Router.requiresAuthentication() has been called");
 			}
 		});
 		

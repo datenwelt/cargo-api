@@ -3,6 +3,7 @@
 const bluebird = require('bluebird');
 const changecase = require('change-case');
 const EventEmitter = require('eventemitter2').EventEmitter2;
+const HttpError = require('standard-http-error');
 const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const moment = require('moment');
 const VError = require('verror');
@@ -36,46 +37,35 @@ class Router extends EventEmitter {
 		};
 	}
 	
-	static requiresAuthentication() {
-		return function (req, res, next) {
-			if (res.headersSent) return next();
-			if (req.username) return next();
-			if (!res.get('WWW-Authenticate')) res.set('WWW-Authenticate', "* realm='Authorizazion required.'");
-			res.append('X-Error', 'ERR_UNAUTHENTICATED_ACCESS');
-			throw new VError(res.get('X-Error'));
-		};
-	}
-	
-	static checkSessionToken(rsaPublicKey) {
+	static requireSessionToken(rsaPublicKey) {
 		return Router.asyncRouter(async function (req, res, next) {
 			if (res.headersSent) return next();
 			if (req.username) return next();
 			const authHeader = req.get('Authorization');
 			if (!authHeader) {
-				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-				return next();
+				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"');
+				throw new HttpError(401, 'ERR_UNAUTHENTICATED_ACCESS');
 			}
 			let [authType, authToken] = authHeader.split(/\s+/);
 			if (!authType || authType.toLowerCase() !== 'bearer') {
 				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-				return next();
+				throw new HttpError(401, 'ERR_UNAUTHENTICATED_ACCESS');
+				return next(new VError('ERR_UNAUTHENTICATED_ACCESS'));
 			}
 			authToken = (authToken || "").trim();
 			if (!authToken) {
 				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
-				return next();
+				throw new HttpError(401, 'ERR_UNAUTHENTICATED_ACCESS');
 			}
 			let payload = null;
 			try {
 				payload = await JWT.verifyAsync(authToken, rsaPublicKey);
 			} catch (err) {
 				if (err.name === 'JsonWebTokenError') {
-					res.status(403).append('X-Error', 'ERR_INVALID_AUTHORIZATION_TOKEN');
-					return next();
+					throw new HttpError(403, 'ERR_INVALID_AUTHORIZATION_TOKEN');
 				}
 				if (err.name === 'TokenExpiredError') {
-					res.status(410).append('X-Error', 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
-					return next();
+					throw new HttpError(410, 'ERR_EXPIRED_AUTHORIZATION_TOKEN');
 				}
 				throw new VError(err, 'Error validating token');
 			}

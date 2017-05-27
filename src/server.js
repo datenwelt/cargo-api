@@ -16,7 +16,7 @@ const Config = require('./config');
 const Daemon = require('./daemon');
 const MQ = require('./mq');
 
-class CargoHttpServer extends Daemon {
+class HttpServer extends Daemon {
 	
 	constructor(name, configFile, options) {
 		super(name, options);
@@ -30,7 +30,7 @@ class CargoHttpServer extends Daemon {
 	}
 	
 	clone() {
-		return new CargoHttpServer(this.name, this.configFile, this.options);
+		return new HttpServer(this.name, this.configFile, this.options);
 	}
 	
 	async init() {
@@ -74,6 +74,7 @@ class CargoHttpServer extends Daemon {
 			const md5 = crypto.createHash('MD5');
 			md5.update(Math.random().toString(10));
 			req.id = md5.digest('hex').substr(0, 8).toUpperCase();
+			res.requestId = req.id;
 			next();
 		});
 		
@@ -130,7 +131,7 @@ class CargoHttpServer extends Daemon {
 		if (config.server && config.server.error_log) {
 			let logfile = config.server.error_log;
 			try {
-				this.app.use(CargoHttpServer.createErrorLog(logfile));
+				this.app.use(HttpServer.createErrorLog(logfile));
 			} catch (err) {
 				throw new VError(err, "Unable to initialize error.log at %s", logfile);
 			}
@@ -138,17 +139,13 @@ class CargoHttpServer extends Daemon {
 		
 		// General error handler.
 		// eslint-disable-next-line handle-callback-err,max-params
-		this.app.use(function (err, req, res, next) {
-			if (res.statusCode === 200) res.status(500);
-			if (!res.headersSent) res.send();
-			next();
-		});
+		this.app.use(HttpServer.createStandardErrorHandler());
 		
 		// Access Log
 		if (config.server && config.server.access_log) {
 			let logfile = config.server.access_log;
 			try {
-				this.app.use(CargoHttpServer.createAccessLog(logfile));
+				this.app.use(HttpServer.createAccessLog(logfile));
 			} catch (err) {
 				throw new VError(err, "Unable to initialize access.log at %s", logfile);
 			}
@@ -195,6 +192,16 @@ class CargoHttpServer extends Daemon {
 			if (this.mq) this.mq.close();
 			resolve();
 		}.bind(this));
+	}
+	
+	static createStandardErrorHandler(headerName) {
+		headerName = headerName || 'X-Error';
+		// eslint-disable-next-line max-params
+		return function (err, req, res, next) {
+			if (err.name === 'HttpError') res.set(headerName, err.message).sendStatus(err.code);
+			else res.sendStatus(500);
+			next(err);
+		};
 	}
 	
 	static createAccessLog(logfile) {
@@ -280,4 +287,4 @@ class CargoHttpServer extends Daemon {
 	
 }
 
-module.exports = CargoHttpServer;
+module.exports = HttpServer;
