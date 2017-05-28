@@ -8,6 +8,8 @@ const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const moment = require('moment');
 const VError = require('verror');
 
+const Checks = require('./checks');
+
 class Router extends EventEmitter {
 	
 	constructor(name) {
@@ -48,7 +50,6 @@ class Router extends EventEmitter {
 			if (!authType || authType.toLowerCase() !== 'bearer') {
 				res.append('WWW-Authenticate', 'Bearer realm="Retrieve a session token by login first"').status(401);
 				throw new HttpError(401, 'ERR_UNAUTHENTICATED_ACCESS');
-				return next(new VError('ERR_UNAUTHENTICATED_ACCESS'));
 			}
 			authToken = (authToken || "").trim();
 			if (!authToken) {
@@ -79,20 +80,40 @@ class Router extends EventEmitter {
 		});
 	}
 	
-	static checkBodyField(fieldName, predicate) {
+	static checkBodyField(fieldName, predicate, options) {
+		options = Object.assign({ optional: false}, options);
 		const errorPrefix = "ERR_BODY_" + changecase.constantCase(fieldName) + "_";
 		return function (req, res, next) {
 			// eslint-disable-next-line no-undefined
 			if (!req.body) throw new HttpError(400, 'ERR_BODY_MISSING');
 			else {
 				try {
-					req.body[fieldName] = predicate(req.body[fieldName]);
+					let value = req.body[fieldName];
+					if (Checks.optional(options.optional, value))
+						req.body[fieldName] = predicate(value, req, res);
+					// eslint-disable-next-line callback-return
 					next();
 				} catch (err) {
 					if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
 					throw new VError(err, 'Internal error in request body check');
 				}
 			}
+		};
+	}
+	
+	static checkRequestParameter(paramName, predicate) {
+		const errorPrefix = "ERR_PARAM_" + changecase.constantCase(paramName) + "_";
+		return function (req, res, next) {
+			// eslint-disable-next-line no-undefined
+			try {
+				req.params[paramName] = predicate(req.params[paramName], req, res);
+				// eslint-disable-next-line callback-return
+				next();
+			} catch (err) {
+				if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
+				throw new VError(err, 'Internal error in request body check');
+			}
+			
 		};
 	}
 	

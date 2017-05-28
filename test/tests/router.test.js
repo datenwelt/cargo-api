@@ -192,10 +192,7 @@ describe('router.js', function () {
 		});
 		
 		it('passes when testField is optional and missing in request', async function () {
-			let checkBodyField = Router.checkBodyField('testField', (value) => {
-				Checks.optional(true, value);
-				return value;
-			});
+			let checkBodyField = Router.checkBodyField('testField', (value) => { return value }, {optional: true});
 			let spy = sinon.spy(checkBodyField);
 			app.post('/', spy);
 			app.post('/', function (req, res, next) {
@@ -267,10 +264,7 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.maxLength() is called', async function () {
-			let checkBodyField = Router.checkBodyField('testField', (value) => {
-				return Checks.maxLength(12, value)
-			});
-			
+			let checkBodyField = Router.checkBodyField('testField', (value) => Checks.maxLength(12, value));
 			let spy = sinon.spy(Checks, 'maxLength');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
