@@ -8,8 +8,6 @@ const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const moment = require('moment');
 const VError = require('verror');
 
-const Checks = require('./checks');
-
 class Router extends EventEmitter {
 	
 	constructor(name) {
@@ -81,46 +79,20 @@ class Router extends EventEmitter {
 		});
 	}
 	
-	static checkBodyField(fieldName, options) {
-		options = Object.assign({
-			optional: false,
-			cast: null,
-			type: 'string',
-			minLength: null,
-			maxLength: null,
-			match: null,
-			notBlank: null,
-			check: null,
-			transform: null
-		}, options);
+	static checkBodyField(fieldName, predicate) {
 		const errorPrefix = "ERR_BODY_" + changecase.constantCase(fieldName) + "_";
 		return function (req, res, next) {
 			// eslint-disable-next-line no-undefined
-			if (!req.body) res.set('X-Error', 'ERR_BODY_MISSING').sendStatus(400);
+			if (!req.body) throw new HttpError(400, 'ERR_BODY_MISSING');
 			else {
 				try {
-					let value = req.body[fieldName];
-					let isPresent = Checks.optional(options.optional, value);
-					if (isPresent) {
-						if (options.cast) value = Checks.cast(options.cast, value);
-						if (options.type) value = Checks.type(options.type, value);
-						if (options.transform) value = Checks.transform(options.transform, value);
-						if (options.check) value = Checks.check(options.check, value);
-						if (options.notBlank) value = Checks.notBlank(value);
-						if (options.minLength) value = Checks.minLength(options.minLength, value);
-						if (options.maxLength) value = Checks.maxLength(options.maxLength, value);
-						if (options.match) value = Checks.match(options.match, value);
-						req.body[fieldName] = value;
-					}
+					req.body[fieldName] = predicate(req.body[fieldName]);
+					next();
 				} catch (err) {
-					if (err.name === 'CargoCheckError') {
-						res.set('X-Error', errorPrefix + err.message).status(400);
-						return next(err);
-					}
+					if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
 					throw new VError(err, 'Internal error in request body check');
 				}
 			}
-			return next();
 		};
 	}
 	

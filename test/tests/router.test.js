@@ -39,12 +39,12 @@ async function createValidSession(username, rsaPrivateKey) {
 	const iat = moment();
 	const exp = iat.add(48, 'h');
 	const token = await
-	JWT.signAsync({
-		sess: sessionId,
-		iat: iat.unix(),
-		exp: exp.unix(),
-		usr: {id: 1, nam: username}
-	}, rsaPrivateKey, {algorithm: 'RS256'});
+		JWT.signAsync({
+			sess: sessionId,
+			iat: iat.unix(),
+			exp: exp.unix(),
+			usr: {id: 1, nam: username}
+		}, rsaPrivateKey, {algorithm: 'RS256'});
 	return token;
 }
 
@@ -164,13 +164,20 @@ describe('router.js', function () {
 	
 	describe('static checkBodyField()', function () {
 		
-		it('respondes with 400/ERR_BODY_TEST_FIELD_MISSING when testField is not present in request', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {});
+		it('responds with 400/ERR_BODY_TEST_FIELD_MISSING when testField is not present in request', async function () {
+			let checkBodyField = Router.checkBodyField('testField', (value) => {
+				Checks.optional(false, value);
+				return value;
+			});
 			let spy = sinon.spy(checkBodyField);
 			app.post('/', spy);
 			app.get('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			app.use(function (err, req, res, next) {
+				if (!res.headersSent) res.end();
 			});
 			try {
 				await superagent.post(app.uri.toString());
@@ -185,26 +192,33 @@ describe('router.js', function () {
 		});
 		
 		it('passes when testField is optional and missing in request', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {type: null, optional: true});
+			let checkBodyField = Router.checkBodyField('testField', (value) => {
+				Checks.optional(true, value);
+				return value;
+			});
 			let spy = sinon.spy(checkBodyField);
 			app.post('/', spy);
 			app.post('/', function (req, res, next) {
 				res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			await superagent.post(app.uri.toString()).send({});
 			assert.isTrue(spy.called, "Router.checkBodyField() has been called");
 		});
 		
 		
 		it('Checks.cast() is called when testField is cast', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {type: null, cast: 'number'});
+			let checkBodyField = Router.checkBodyField('testField', (value) => {
+				return Checks.cast('number', value);
+			});
 			let spy = sinon.spy(Checks, 'cast');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Router.checkBodyField() has been called");
@@ -214,13 +228,16 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.type() is called when testField is type-tested', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {type: 'string'});
+			let checkBodyField = Router.checkBodyField('testField', (value) => {
+				return Checks.type('string', value)
+			});
 			let spy = sinon.spy(Checks, 'type');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Check.type() has been called");
@@ -230,13 +247,17 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.minLength() is called', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {minLength: 2});
+			let checkBodyField = Router.checkBodyField('testField',
+				(value) => {
+					return Checks.minLength(2, value)
+				});
 			let spy = sinon.spy(Checks, 'minLength');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Check.minLength() has been called");
@@ -246,13 +267,17 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.maxLength() is called', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {maxLength: 12});
+			let checkBodyField = Router.checkBodyField('testField', (value) => {
+				return Checks.maxLength(12, value)
+			});
+			
 			let spy = sinon.spy(Checks, 'maxLength');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Check.maxLength() has been called");
@@ -262,13 +287,17 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.match() is called', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {match: /^1023$/});
+			let checkBodyField = Router.checkBodyField('testField',
+				(value) => {
+					return Checks.match(/^1023$/, value)
+				});
 			let spy = sinon.spy(Checks, 'match');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Check.match() has been called");
@@ -278,13 +307,17 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.notBlank() is called', async function () {
-			let checkBodyField = Router.checkBodyField('testField', {notBlank: true});
+			let checkBodyField = Router.checkBodyField('testField',
+				(value) => {
+					return Checks.notBlank(value)
+				});
 			let spy = sinon.spy(Checks, 'notBlank');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
 				if (!res.headersSent) res.sendStatus(200);
 				next();
 			});
+			app.use(Server.createHttpErrorHandler());
 			try {
 				await superagent.post(app.uri.toString()).send({testField: '1023'});
 				assert.isTrue(spy.called, "Check.notBlank() has been called");
