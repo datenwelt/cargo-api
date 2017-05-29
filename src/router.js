@@ -1,5 +1,7 @@
 /* eslint-disable class-methods-use-this,no-new-func */
 
+// eslint-disable-next-line id-length
+const _ = require('underscore');
 const bluebird = require('bluebird');
 const changecase = require('change-case');
 const EventEmitter = require('eventemitter2').EventEmitter2;
@@ -178,7 +180,7 @@ class Router extends EventEmitter {
 	
 	static createGenericListRouter(listGenerator) {
 		return Router.asyncRouter(async function (req, res, next) {
-			Router.checkQueryParameter('pos', (value) => {
+			Router.checkQueryParameter('offset', (value) => {
 				value = Checks.cast('number', value);
 				return Checks.min(0, value);
 			}, {optional: true})(req, res, new Function());
@@ -186,35 +188,40 @@ class Router extends EventEmitter {
 				value = Checks.cast('number', value);
 				return Checks.min(0, value);
 			}, {optional: true})(req, res, new Function());
-			Router.checkQueryParameter('order-by', (value) => {
-				value = Checks.cast('string', value).trim();
-				return value;
-			}, {optional: true})(req, res, new Function());
-			Router.checkQueryParameter('order-dir', (value) => {
-				value = Checks.cast('string', value).trim().toLowerCase();
-				if (value !== 'asc' && value !== 'desc') throw new HttpError(400, 'ERR_QUERY_ORDER_DIR_INVALID');
-				return value;
-			}, {optional: true})(req, res, new Function());
 			let listOptions = {
-				pos: 0,
-				limit: 10,
-				orderBy: null,
-				orderDirection: 'asc'
+				offset: 0,
+				limit: 10
 			};
 			// eslint-disable-next-line no-undefined
-			if (req.query.pos !== undefined && req.query.pos !== null) listOptions.pos = req.query.pos;
+			if (req.query.offset !== undefined && req.query.offset !== null) listOptions.offset = req.query.offset;
 			// eslint-disable-next-line no-undefined
-			if (req.query.limit !== undefined && req.query.pos !== null) listOptions.limit = req.query.limit;
-			if (req.query['order-by']) listOptions.orderBy = req.query['order-by'];
-			if (req.query['order-dir']) listOptions.orderDirection = req.query['order-dir'];
+			if (req.query.limit !== undefined && req.query.limit !== null) listOptions.limit = req.query.limit;
+			// eslint-disable-next-line no-undefined
+			if (req.query.orderBy !== undefined && req.query.orderBy !== null) {
+				let orderBy = req.query.orderBy;
+				if (_.isString(orderBy)) orderBy = [orderBy];
+				if (!_.isArray(orderBy)) throw new HttpError(400, 'ERR_QUERY_ORDER_BY_INVALID');
+				_.each(orderBy, function (item) {
+					if (!_.isString(item)) throw new HttpError(400, 'ERR_QUERY_ORDER_BY_INVALID');
+					if (!item.match(/^[a-zA-Z_]+(?:,(asc|desc))?/)) throw new HttpError(400, 'ERR_QUERY_ORDER_BY_INVALID');
+				});
+				listOptions.orderBy = orderBy;
+			}
 			let list = await listGenerator(listOptions, req, res);
 			list = list || [];
 			res.status(200);
 			res.set('X-List-Count', list.length);
-			res.set('X-List-Pos', listOptions.pos);
-			res.set('X-List-Page-Size', listOptions.limit);
-			if (listOptions.orderBy)
-				res.set('X-List-Order', listOptions.orderBy + ";" + listOptions.orderDirection);
+			res.set('X-List-Offset', listOptions.offset);
+			res.set('X-List-Limit', listOptions.limit);
+			if (listOptions.orderBy && listOptions.orderBy.length > 0) {
+				let headerValues = _.chain(listOptions.orderBy).map(function (item) {
+					return item.replace(',', ';');
+				}).reduce(function (memo, item) {
+					if (memo) memo += ",";
+					return memo + item;
+				}, "").value();
+				res.set('X-List-Order', headerValues);
+			}
 			res.send(list);
 			next();
 		});

@@ -644,7 +644,7 @@ describe('router.js', function () {
 			});
 			let resp = null;
 			try {
-				resp = await superagent.get(app.uri.toString() + "?pos=0&limit=10&order-by=id&order-dir=asc");
+				resp = await superagent.get(app.uri.toString() + "?pos=0&limit=10&orderBy=id,asc&orderBy=description");
 			} catch (err) {
 				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
 				throw err;
@@ -652,13 +652,13 @@ describe('router.js', function () {
 			
 			let listOptions = await serverPromise;
 			assert.deepEqual(listOptions, {
-				pos: 0, limit: 10, orderBy: 'id', orderDirection: 'asc'
+				offset: 0, limit: 10, orderBy: ['id,asc', 'description']
 			});
 			assert.deepEqual(resp.body, [1, 2, 3, 4]);
-			assert.equal(resp.get('X-List-Pos'), 0);
-			assert.equal(resp.get('X-List-Page-Size'), 10);
+			assert.equal(resp.get('X-List-Offset'), 0);
 			assert.equal(resp.get('X-List-Count'), 4);
-			assert.equal(resp.get('X-List-Order'), 'id;asc');
+			assert.equal(resp.get('X-List-Limit'), 10);
+			assert.equal(resp.get('X-List-Order'), 'id;asc,description');
 		});
 		
 	});
