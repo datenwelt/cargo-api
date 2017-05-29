@@ -1,4 +1,4 @@
-/* eslint-disable no-invalid-this,consistent-return,handle-callback-err,max-params,no-unused-vars */
+/* eslint-disable no-invalid-this,consistent-return,handle-callback-err,max-params,no-unused-vars,no-console */
 const describe = require('mocha').describe;
 const before = require('mocha').before;
 const after = require('mocha').after;
@@ -239,9 +239,7 @@ describe('router.js', function () {
 		});
 		
 		it('Checks.type() is called when testField is type-tested', async function () {
-			let checkBodyField = Router.checkBodyField('testField', (value) => {
-				return Checks.type('string', value)
-			});
+			let checkBodyField = Router.checkBodyField('testField', (value) => Checks.type('string', value));
 			let spy = sinon.spy(Checks, 'type');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
