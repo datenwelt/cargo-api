@@ -1,4 +1,4 @@
-/* eslint-disable class-methods-use-this */
+/* eslint-disable class-methods-use-this,no-new-func */
 
 const bluebird = require('bluebird');
 const changecase = require('change-case');
@@ -6,6 +6,7 @@ const EventEmitter = require('eventemitter2').EventEmitter2;
 const HttpError = require('standard-http-error');
 const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const moment = require('moment');
+const URI = require('urijs');
 const VError = require('verror');
 
 const Checks = require('./checks');
@@ -81,7 +82,7 @@ class Router extends EventEmitter {
 	}
 	
 	static checkBodyField(fieldName, predicate, options) {
-		options = Object.assign({ optional: false}, options);
+		options = Object.assign({optional: false}, options);
 		const errorPrefix = "ERR_BODY_" + changecase.constantCase(fieldName) + "_";
 		return function (req, res, next) {
 			// eslint-disable-next-line no-undefined
@@ -111,10 +112,112 @@ class Router extends EventEmitter {
 				next();
 			} catch (err) {
 				if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
-				throw new VError(err, 'Internal error in request body check');
+				throw new VError(err, 'Internal error in request parameter check');
 			}
 			
 		};
+	}
+	
+	static checkQueryParameter(queryName, predicate, options) {
+		options = Object.assign({optional: false}, options);
+		const errorPrefix = "ERR_QUERY_" + changecase.constantCase(queryName) + "_";
+		return function (req, res, next) {
+			// eslint-disable-next-line no-undefined
+			try {
+				let value = req.query[queryName];
+				if (Checks.optional(options.optional, value))
+					req.query[queryName] = predicate(value, req, res);
+				// eslint-disable-next-line callback-return
+				next();
+			} catch (err) {
+				if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
+				throw new VError(err, 'Internal error in request query check');
+			}
+			
+		};
+	}
+	
+	static checkRequestHeader(headerName, predicate, options) {
+		options = Object.assign({optional: false}, options);
+		const errorPrefix = "ERR_HEADER_" + changecase.constantCase(headerName) + "_";
+		return function (req, res, next) {
+			// eslint-disable-next-line no-undefined
+			try {
+				let value = req.get(headerName);
+				if (Checks.optional(options.optional, value))
+					req.headers[headerName] = predicate(value, req, res);
+				// eslint-disable-next-line callback-return
+				next();
+			} catch (err) {
+				if (err.name === 'CargoCheckError') throw new HttpError(400, errorPrefix + err.message);
+				throw new VError(err, 'Internal error in request header check');
+			}
+			
+		};
+	}
+	
+	static checkOriginHeader(options) {
+		options = Object.assign({optional: false}, options);
+		return function (req, res, next) {
+			let origin = req.get('Origin') || req.get('Referer');
+			if (!origin) {
+				if (options.optional) return next();
+				throw new HttpError(400, 'ERR_HEADER_ORIGIN_MISSING');
+			}
+			if (origin.match(/^https?:\/\//)) {
+				try {
+					origin = new URI(origin).hostname();
+				} catch (err) {
+					throw new HttpError(440, 'ERR_HEADER_ORIGIN_NOURL');
+				}
+			}
+			req.origin = origin;
+			return next();
+		};
+	}
+	
+	static createGenericListRouter(listGenerator) {
+		return Router.asyncRouter(async function (req, res, next) {
+			Router.checkQueryParameter('pos', (value) => {
+				value = Checks.cast('number', value);
+				return Checks.min(0, value);
+			}, {optional: true})(req, res, new Function());
+			Router.checkQueryParameter('limit', (value) => {
+				value = Checks.cast('number', value);
+				return Checks.min(0, value);
+			}, {optional: true})(req, res, new Function());
+			Router.checkQueryParameter('order-by', (value) => {
+				value = Checks.cast('string', value).trim();
+				return value;
+			}, {optional: true})(req, res, new Function());
+			Router.checkQueryParameter('order-dir', (value) => {
+				value = Checks.cast('string', value).trim().toLowerCase();
+				if (value !== 'asc' && value !== 'desc') throw new HttpError(400, 'ERR_QUERY_ORDER_DIR_INVALID');
+				return value;
+			}, {optional: true})(req, res, new Function());
+			let listOptions = {
+				pos: 0,
+				limit: 10,
+				orderBy: null,
+				orderDirection: 'asc'
+			};
+			// eslint-disable-next-line no-undefined
+			if (req.query.pos !== undefined && req.query.pos !== null) listOptions.pos = req.query.pos;
+			// eslint-disable-next-line no-undefined
+			if (req.query.limit !== undefined && req.query.pos !== null) listOptions.limit = req.query.limit;
+			if (req.query['order-by']) listOptions.orderBy = req.query['order-by'];
+			if (req.query['order-dir']) listOptions.orderDirection = req.query['order-dir'];
+			let list = await listGenerator(listOptions, req, res);
+			list = list || [];
+			res.status(200);
+			res.set('X-List-Count', list.length);
+			res.set('X-List-Pos', listOptions.pos);
+			res.set('X-List-Page-Size', listOptions.limit);
+			if (listOptions.orderBy)
+				res.set('X-List-Order', listOptions.orderBy + ";" + listOptions.orderDirection);
+			res.send(list);
+			next();
+		});
 	}
 	
 	static serialize(data) {

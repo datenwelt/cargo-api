@@ -17,6 +17,7 @@ const bluebird = require('bluebird');
 const JWT = bluebird.promisifyAll(require('jsonwebtoken'));
 const moment = require('moment');
 const superagent = require('superagent');
+const util = require('util');
 
 const Checks = require('../../src/checks');
 const Router = require('../../src/router');
@@ -27,8 +28,23 @@ let app = null;
 let rsa = null;
 
 function suppressErrorLog(err, req, res, next) {
+	if (err.name !== 'HttpError') console.log(err);
 	if (!res.headersSent) res.end();
 }
+
+async function expectErrorResponse(code, error, xhrPromise) {
+	try {
+		await xhrPromise;
+	} catch (err) {
+		assert.property(err, 'response');
+		const response = err.response;
+		assert.equal(response.status, code, "Unexpected status code");
+		assert.equal(response.header['x-error'], error, "Unexpected error header");
+		return;
+	}
+	throw new Error('XMLHttpRequest was successful but should have failed.');
+}
+
 
 async function createValidSession(username, rsaPrivateKey) {
 	// Create a session id.
@@ -192,7 +208,7 @@ describe('router.js', function () {
 		});
 		
 		it('passes when testField is optional and missing in request', async function () {
-			let checkBodyField = Router.checkBodyField('testField', (value) => { return value }, {optional: true});
+			let checkBodyField = Router.checkBodyField('testField', (value) => value, {optional: true});
 			let spy = sinon.spy(checkBodyField);
 			app.post('/', spy);
 			app.post('/', function (req, res, next) {
@@ -206,9 +222,7 @@ describe('router.js', function () {
 		
 		
 		it('Checks.cast() is called when testField is cast', async function () {
-			let checkBodyField = Router.checkBodyField('testField', (value) => {
-				return Checks.cast('number', value);
-			});
+			let checkBodyField = Router.checkBodyField('testField', (value) => Checks.cast('number', value));
 			let spy = sinon.spy(Checks, 'cast');
 			app.post('/', checkBodyField);
 			app.post('/', function (req, res, next) {
@@ -319,6 +333,334 @@ describe('router.js', function () {
 				spy.restore();
 			}
 		});
+	});
+	
+	describe('static checkRequestHeader()', function () {
+		
+		let spy = null;
+		
+		afterEach(function () {
+			if (spy) spy.restore();
+			spy = null;
+		});
+		
+		it('passes with non-optional valid input values', async function () {
+			let checkRequestHeader = Router.checkRequestHeader('x-test-header', (value) => {
+				Checks.optional(false, value);
+				return value;
+			});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkRequestHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString()).set('x-test-header', 'XXXXX');
+				assert.isTrue(spy.called, 'Header check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes with optional but missing input values', async function () {
+			let checkRequestHeader = Router.checkRequestHeader('x-test-header', (value) => {
+				return value;
+			}, {optional: true});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkRequestHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString());
+				assert.isTrue(spy.called, 'Query check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('responds with status 400 and ERR_HEADER_X_TEST_HEADER_MISSING if non-optional value misses', async function () {
+			let checkRequestHeader = Router.checkRequestHeader('x-test-header', (value) => value);
+			app.get('/', checkRequestHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			app.use('/', suppressErrorLog);
+			await expectErrorResponse(400, 'ERR_HEADER_X_TEST_HEADER_MISSING',
+				superagent.get(app.uri.toString()));
+		});
+	});
+	
+	describe('static checkQueryParam()', function () {
+		
+		let spy = null;
+		
+		afterEach(function () {
+			if (spy) spy.restore();
+			spy = null;
+		});
+		
+		it('passes with non-optional valid input values', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => {
+				Checks.optional(false, value);
+				return value;
+			});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString() + "?testparam=xxx");
+				assert.isTrue(spy.called, 'Query check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes with optional but missing input values', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => {
+				return value;
+			}, {optional: true});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString());
+				assert.isTrue(spy.called, 'Query check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('responds with status 400 and ERR_QUERY_TESTPARAM_MISSING if non-optional value misses', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => value);
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			app.use('/', suppressErrorLog);
+			await expectErrorResponse(400, 'ERR_QUERY_TESTPARAM_MISSING',
+				superagent.get(app.uri.toString()));
+		});
+	});
+	
+	describe('static checkQueryParam()', function () {
+		
+		let spy = null;
+		
+		afterEach(function () {
+			if (spy) spy.restore();
+			spy = null;
+		});
+		
+		it('passes with non-optional valid input values', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => {
+				Checks.optional(false, value);
+				return value;
+			});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString() + "?testparam=xxx");
+				assert.isTrue(spy.called, 'Query check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes with optional but missing input values', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => {
+				return value;
+			}, {optional: true});
+			spy = sinon.spy(Checks, 'optional');
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString());
+				assert.isTrue(spy.called, 'Query check predicate has been called.');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('responds with status 400 and ERR_QUERY_TESTPARAM_MISSING if non-optional value misses', async function () {
+			let checkQueryParam = Router.checkQueryParameter('testparam', (value) => value);
+			app.get('/', checkQueryParam);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			app.use('/', suppressErrorLog);
+			await expectErrorResponse(400, 'ERR_QUERY_TESTPARAM_MISSING',
+				superagent.get(app.uri.toString()));
+		});
+	});
+	
+	describe('static checkOriginHeader()', function () {
+		
+		let spy = null;
+		
+		afterEach(function () {
+			if (spy) spy.restore();
+			spy = null;
+		});
+		
+		it('passes if Origin header is present and valid', async function () {
+			let checkOriginHeader = Router.checkOriginHeader();
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString()).set('Origin', 'http://cargohub.io');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes if Referer header is present and valid', async function () {
+			let checkOriginHeader = Router.checkOriginHeader();
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString()).set('Referer', 'http://cargohub.io');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes if Referer header is a hostname instead of URI', async function () {
+			let checkOriginHeader = Router.checkOriginHeader();
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString()).set('Referer', 'cargohub.io');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes if Origin header is a hostname instead of URI', async function () {
+			let checkOriginHeader = Router.checkOriginHeader();
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString()).set('Origin', 'cargohub.io');
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('passes if Origin header is optional and missing', async function () {
+			let checkOriginHeader = Router.checkOriginHeader({optional: true});
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			try {
+				await superagent.get(app.uri.toString());
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+		});
+		
+		it('responds with status 400 and ERR_HEADER_ORIGIN_MISSING if non-optional value misses', async function () {
+			let checkOriginHeader = Router.checkOriginHeader();
+			app.get('/', checkOriginHeader);
+			app.get('/', function (req, res, next) {
+				if (!res.headersSent) res.status(200).send({});
+				next();
+			});
+			app.use(Server.createHttpErrorHandler());
+			app.use('/', suppressErrorLog);
+			await expectErrorResponse(400, 'ERR_HEADER_ORIGIN_MISSING',
+				superagent.get(app.uri.toString()));
+		});
+	});
+	
+	describe('static createGenericListRouter()', function () {
+		
+		it('passes the list query parameters to the router function', async function () {
+			let Promise = bluebird;
+			let serverPromise = new Promise(function (resolve, reject) {
+				app.get('/', Router.createGenericListRouter(function (listOptions, req, res) {
+					resolve(listOptions);
+					return [1, 2, 3, 4];
+				}));
+				app.use(Server.createHttpErrorHandler());
+				app.use('/', suppressErrorLog);
+			});
+			let resp = null;
+			try {
+				resp = await superagent.get(app.uri.toString() + "?pos=0&limit=10&order-by=id&order-dir=asc");
+			} catch (err) {
+				if (err.response) assert.fail(true, true, util.format('Request failed: %d %s', err.response.status, err.response.get('X-Error')));
+				throw err;
+			}
+			
+			let listOptions = await serverPromise;
+			assert.deepEqual(listOptions, {
+				pos: 0, limit: 10, orderBy: 'id', orderDirection: 'asc'
+			});
+			assert.deepEqual(resp.body, [1, 2, 3, 4]);
+			assert.equal(resp.get('X-List-Pos'), 0);
+			assert.equal(resp.get('X-List-Page-Size'), 10);
+			assert.equal(resp.get('X-List-Count'), 4);
+			assert.equal(resp.get('X-List-Order'), 'id;asc');
+		});
+		
 	});
 	
 });

@@ -97,6 +97,7 @@ class HttpServer extends Daemon {
 			md5.update(Math.random().toString(10));
 			req.id = md5.digest('hex').substr(0, 8).toUpperCase();
 			res.requestId = req.id;
+			res.set('X-Request-Id', req.id);
 			next();
 		});
 		

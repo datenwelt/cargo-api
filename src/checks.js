@@ -110,6 +110,22 @@ class Checks {
 		else throw new VError({name: errorName}, 'INVALID');
 	}
 	
+	static min(minimum, value) {
+		if (value === null || value === undefined) throw new VError({name: errorName}, 'MISSING');
+		else if (_.isNumber(value))
+			if (value < minimum) throw new VError({name: errorName}, 'TOOLOW');
+			else return value;
+		else throw new VError({name: errorName}, 'INVALID');
+	}
+	
+	static max(maximum, value) {
+		if (value === null || value === undefined) throw new VError({name: errorName}, 'MISSING');
+		else if (_.isNumber(value))
+			if (value > maximum) throw new VError({name: errorName}, 'TOOHIGH');
+			else return value;
+		else throw new VError({name: errorName}, 'INVALID');
+	}
+	
 	static match(regex, value) {
 		if (value === null || value === undefined) throw new VError({name: errorName}, 'MISSING');
 		else if (_.isString(value))
