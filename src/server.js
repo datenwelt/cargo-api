@@ -106,7 +106,7 @@ class HttpServer extends Daemon {
 		
 		let corsOptions = {
 			origin: true,
-			exposedHeaders: ['X-Error', 'X-Request_id', 'X-List-Count', 'X-List-Offset', 'X-List-Limit', 'X-List-Order'],
+			exposedHeaders: ['X-Error', 'X-Request-Id', 'X-List-Count', 'X-List-Offset', 'X-List-Limit', 'X-List-Order'],
 			methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 		};
 		this.app.use(cors(corsOptions));
