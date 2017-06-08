@@ -103,8 +103,14 @@ class HttpServer extends Daemon {
 		
 		
 		this.app.use(bodyParser.json());
-		this.app.use(cors());
-		this.app.options('*', cors());
+		
+		let corsOptions = {
+			origin: true,
+			exposedHeaders: ['X-Error', 'X-Request_id', 'X-List-Count', 'X-List-Offset', 'X-List-Limit', 'X-List-Order'],
+			methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+		};
+		this.app.use(cors(corsOptions));
+		this.app.options('*', cors(corsOptions));
 		
 		if (config.server.routes) {
 			for (let routeIndex of Object.keys(config.server.routes).sort()) {
@@ -163,7 +169,7 @@ class HttpServer extends Daemon {
 				next(err);
 			});
 		});
-
+		
 		// eslint-disable-next-line no-unused-vars,max-params,handle-callback-err
 		this.app.use(function (err, req, res, next) {
 			if (!res.headersSent) res.end();
