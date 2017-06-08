@@ -83,7 +83,6 @@ class HttpServer extends Daemon {
 			}
 		}
 		
-		
 		let port = Number.parseInt(config.server.port || 80, 10);
 		if (Number.isNaN(port) || port <= 0) {
 			throw new VError('Invalid value for "server.port": %s', config.server.port);
